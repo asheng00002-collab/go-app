@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#f7f3ea">
+<title>圍棋入門</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:#f7f3ea;color:#2b2b2b;font-size:17px;line-height:1.6}
+header{position:sticky;top:0;background:#fffdf8;border-bottom:1px solid #e6dcc6;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;font-weight:700;font-size:19px;z-index:5;display:flex;align-items:center;gap:8px}
+header button{font-size:16px;padding:6px 10px;min-height:40px}
+main{padding:12px 14px calc(90px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fffdf8;border-top:1px solid #e6dcc6;padding-bottom:env(safe-area-inset-bottom);z-index:10}
+nav button{flex:1;border:0;background:none;padding:8px 0 10px;font-size:13px;color:#8a7f6a;min-height:60px;border-radius:0}
+nav button b{display:block;font-size:22px;line-height:1.2}
+nav button.on{color:#b0571b;font-weight:700}
+button{font-family:inherit;font-size:16px;border:1px solid #d6c9ad;background:#fff;border-radius:12px;padding:10px 14px;min-height:46px;color:#2b2b2b;cursor:pointer}
+button.pri{background:#b0571b;color:#fff;border-color:#b0571b}
+button:disabled{opacity:.45}
+.card{background:#fff;border:1px solid #ebe2cf;border-radius:16px;padding:14px;margin-bottom:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>button{flex:1}
+.list button{display:flex;width:100%;text-align:left;margin-bottom:8px;align-items:center;gap:10px}
+.list button .n{width:32px;height:32px;border-radius:50%;background:#efe6d3;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.list button.done .n{background:#4a8f4f;color:#fff}
+.list button small{display:block;color:#8a7f6a;font-size:13px}
+.board{width:100%;max-width:480px;margin:6px auto;display:block;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.msg{min-height:28px;font-weight:600;text-align:center;margin:4px 0}
+.ok{color:#2e7d32}.bad{color:#c62828}.info{color:#6b5a3a}
+h2{font-size:20px;margin:6px 0 8px}h3{font-size:17px;margin:10px 0 4px}
+.tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:10px;background:#efe6d3;margin-right:4px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.grid button{padding:0;min-height:52px;font-weight:700}
+.grid button.done{background:#e3f1e3;border-color:#8fc293}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat div{background:#fff;border:1px solid #ebe2cf;border-radius:14px;padding:12px;text-align:center}
+.stat b{display:block;font-size:26px;color:#b0571b}
+.seg{display:flex;border:1px solid #d6c9ad;border-radius:12px;overflow:hidden;margin-bottom:8px}
+.seg button{flex:1;border:0;border-radius:0;min-height:42px}
+.seg button.on{background:#b0571b;color:#fff}
+.quiz button{display:block;width:100%;margin:6px 0;text-align:left}
+.tip{background:#fff7e6;border-left:4px solid #e0a43a;padding:8px 10px;border-radius:8px;margin:8px 0;font-size:15px}
+</style>
+</head>
+<body>
+<header id="hd">圍棋入門</header>
+<main id="app"></main>
+<nav id="nav">
+<button data-t="lessons"><b>📖</b>課程</button>
+<button data-t="puzzles"><b>🧩</b>練習題</button>
+<button data-t="play"><b>⚫</b>對弈</button>
+<button data-t="progress"><b>📊</b>進度</button>
+</nav>
+<script>
+"use strict";
+// ===== 規則引擎 =====
+function nbrs(n,p){const x=p%n,y=(p/n)|0,r=[];if(x>0)r.push(p-1);if(x<n-1)r.push(p+1);if(y>0)r.push(p-n);if(y<n-1)r.push(p+n);return r;}
+function groupAt(b,n,p){const c=b[p],st=[p],seen=new Set([p]),libs=new Set();while(st.length){const q=st.pop();for(const r of nbrs(n,q)){if(b[r]===0)libs.add(r);else if(b[r]===c&&!seen.has(r)){seen.add(r);st.push(r);}}}return{stones:[...seen],libs};}
+// 回傳 {b,cap,ko} 或 {err}
+function tryPlay(b,n,p,c,ko){
+  if(b[p]!==0)return{err:'occupied'};
+  if(p===ko)return{err:'ko'};
+  const nb=b.slice();nb[p]=c;const o=3-c;let cap=[];
+  for(const r of nbrs(n,p))if(nb[r]===o){const g=groupAt(nb,n,r);if(g.libs.size===0)for(const s of g.stones){nb[s]=0;cap.push(s);}}
+  const me=groupAt(nb,n,p);
+  if(me.libs.size===0)return{err:'suicide'};
+  let nk=-1;if(cap.length===1&&me.stones.length===1&&me.libs.size===1)nk=cap[0];
+  return{b:nb,cap:cap.length,capList:cap,ko:nk};
+}
+const ERR={occupied:'這裡已經有棋子了',ko:'劫：不能立刻提回，請先在別處下一手',suicide:'禁著點：下在這裡自己會沒有氣（又不能提子）'};
+// 數子（中國規則）
+function areaScore(b,n,dead){
+  const bb=b.slice();if(dead)for(const p of dead)bb[p]=0;
+  let s={1:0,2:0},terr=new Array(n*n).fill(0),seen=new Set();
+  for(let p=0;p<n*n;p++){if(bb[p]){s[bb[p]]++;terr[p]=bb[p];continue;}
+    if(seen.has(p))continue;const st=[p],reg=[p],bor=new Set();seen.add(p);
+    while(st.length){const q=st.pop();for(const r of nbrs(n,q)){if(bb[r])bor.add(bb[r]);else if(!seen.has(r)){seen.add(r);st.push(r);reg.push(r);}}}
+    if(bor.size===1){const c=[...bor][0];s[c]+=reg.length;for(const q of reg)terr[q]=c;}
+  }
+  return{s,terr};
+}
+// ===== 棋盤繪製 =====
+function drawBoard(el,n,b,o={}){
+  const S=100,m=S*0.6,W=m*2+S*(n-1);let h=`<svg class="board" viewBox="0 0 ${W} ${W}" xmlns="http://www.w3.org/2000/svg"><rect width="${W}" height="${W}" rx="24" fill="#e8c27a"/>`;
+  for(let i=0;i<n;i++){const c=m+i*S;h+=`<line x1="${m}" y1="${c}" x2="${m+S*(n-1)}" y2="${c}" stroke="#5a4020" stroke-width="${i==0||i==n-1?5:3}"/><line x1="${c}" y1="${m}" x2="${c}" y2="${m+S*(n-1)}" stroke="#5a4020" stroke-width="${i==0||i==n-1?5:3}"/>`;}
+  const stars=n==9?[[2,2],[6,2],[4,4],[2,6],[6,6]]:n==7?[[3,3]]:[];
+  for(const[x,y]of stars)h+=`<circle cx="${m+x*S}" cy="${m+y*S}" r="9" fill="#5a4020"/>`;
+  if(o.terr)for(let p=0;p<n*n;p++)if(o.terr[p]&&(!b[p]||(o.dead&&o.dead.has(p)))){const x=m+(p%n)*S,y=m+((p/n)|0)*S;h+=`<rect x="${x-16}" y="${y-16}" width="32" height="32" fill="${o.terr[p]==1?'#111':'#fff'}" stroke="#555" stroke-width="2"/>`;}
+  for(let p=0;p<n*n;p++)if(b[p]){const x=m+(p%n)*S,y=m+((p/n)|0)*S,bl=b[p]==1,d=o.dead&&o.dead.has(p);
+    h+=`<circle cx="${x+3}" cy="${y+4}" r="46" fill="rgba(0,0,0,.25)"/><circle cx="${x}" cy="${y}" r="46" fill="${bl?'#1d1d1d':'#fafafa'}" stroke="${bl?'#000':'#888'}" stroke-width="2" opacity="${d?0.45:1}"/>`;
+    if(bl&&!d)h+=`<circle cx="${x-14}" cy="${y-14}" r="12" fill="rgba(255,255,255,.18)"/>`;
+    if(d)h+=`<path d="M${x-20} ${y-20}L${x+20} ${y+20}M${x+20} ${y-20}L${x-20} ${y+20}" stroke="#d32f2f" stroke-width="8"/>`;
+    if(o.last===p)h+=`<circle cx="${x}" cy="${y}" r="16" fill="none" stroke="${bl?'#fff':'#000'}" stroke-width="6"/>`;
+    if(o.labels&&o.labels[p])h+=`<text x="${x}" y="${y+14}" font-size="40" text-anchor="middle" fill="${bl?'#fff':'#000'}">${o.labels[p]}</text>`;}
+  if(o.hint!=null&&o.hint>=0){const x=m+(o.hint%n)*S,y=m+((o.hint/n)|0)*S;h+=`<circle cx="${x}" cy="${y}" r="40" fill="rgba(255,80,0,.35)" stroke="#e65100" stroke-width="6"/>`;}
+  if(o.marks)for(const p of o.marks){const x=m+(p%n)*S,y=m+((p/n)|0)*S;h+=`<circle cx="${x}" cy="${y}" r="18" fill="#2a7de1"/>`;}
+  h+='</svg>';el.innerHTML=h;
+  if(o.onTap){const svg=el.firstChild;svg.addEventListener('click',e=>{const r=svg.getBoundingClientRect(),k=W/r.width,px=(e.clientX-r.left)*k,py=(e.clientY-r.top)*k;
+    const x=Math.round((px-m)/S),y=Math.round((py-m)/S);if(x<0||y<0||x>=n||y>=n)return;if(Math.hypot(px-(m+x*S),py-(m+y*S))>S*0.62)return;o.onTap(y*n+x);});}
+}
+// ===== 題目資料 =====
+function E(n){return Array(n).fill('.'.repeat(n));}
+function parse(rows){const n=rows.length,b=[];for(const r of rows)for(const ch of r)b.push(ch=='X'?1:ch=='O'?2:0);return{n,b};}
+function T(k,x,y,n){let a=x,c=y;if(k&1)a=n-1-a;if(k&2)c=n-1-c;if(k&4)[a,c]=[c,a];return[a,c];}
+function transform(P,k){if(!k)return P;const n=P.rows.length,g=[...Array(n)].map(()=>Array(n).fill('.'));
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){const[a,c]=T(k,x,y,n);g[c][a]=P.rows[y][x];}
+  const tp=v=>v?T(k,v[0],v[1],n):v;
+  return Object.assign({},P,{rows:g.map(r=>r.join('')),target:tp(P.target),steps:P.steps.map(s=>Object.assign({},s,{a:tp(s.a),reply:tp(s.reply),ok:s.ok&&s.ok.map(tp)}))});}
+function swap(P){return Object.assign({},P,{rows:P.rows.map(r=>r.replace(/X/g,'x').replace(/O/g,'X').replace(/x/g,'O'))});}
+const SH={
+ c1:{rows:[".....","..X..",".XO..","..X..","....."],steps:[{goal:'capture',a:[3,2]}]},
+ c2:{rows:[".XOO.","..XX.",".....",".....","....."],steps:[{goal:'capture',a:[4,0]}]},
+ c3:{rows:["O....","X....",".....",".....","....."],steps:[{goal:'capture',a:[1,0]}]},
+ c4:{rows:[".OX..",".....",".....",".....","....."],steps:[{ok:[[1,1]],a:[1,1],reply:[0,0]},{goal:'capture',a:[0,1]}]},
+ ko:{rows:[".....",".XO..","XO.O.",".XO..","....."],steps:[{goal:'capture',a:[2,2]}]},
+ e1:{rows:[".....","..O..",".OXO.",".....","....."],target:[2,2],steps:[{goal:'save',a:[2,3]}]},
+ e2:{rows:[".XO..",".OX..",".....",".....","....."],target:[1,0],steps:[{goal:'save',a:[3,0]}]},
+ e3:{rows:[".....",".OO..","OXX..",".OO..","....."],target:[1,2],steps:[{goal:'save',a:[3,2]}]},
+ s3:{rows:["OX...XO","OXXXXXO","OOOOOOO",".......",".......",".......","......."],steps:[{ok:[[3,0]],a:[3,0]}]},
+ b3:{rows:["OX..XO.","OXX.XO.","OOXXXO.",".OOOOO.",".......",".......","......."],steps:[{ok:[[3,0]],a:[3,0]}]},
+ k3:{rows:["..XO...",".XXO...","XXOO...","OOO....",".......",".......","......."],steps:[{ok:[[0,0]],a:[0,0]}]},
+};
+function mk(sh,k,extra){return Object.assign(transform(SH[sh],k),extra);}
+const PZ=[];
+function addP(cat,sh,k,title,desc,hint,sw){let P=sw?swap(SH[sh]):SH[sh];P=transform(P,k);PZ.push(Object.assign({},P,{id:cat+PZ.length,cat,title,desc,hint}));}
+[['c1',0],['c1',5],['c2',0],['c2',3],['c3',0],['c3',6],['c4',0],['c4',5],['ko',1]].forEach(([s,k],i)=>addP('吃子',s,k,'吃子 '+(i+1),s=='c4'?'黑先。用兩手棋吃掉白子（白會應一手）。':'黑先。找出能提掉白子的一手。',s=='c4'?'先從外側叫吃，把白子趕向角落。':'找到白子最後一口氣。'));
+[['e1',0],['e1',6],['e2',0],['e2',1],['e2',7],['e3',0],['e3',3]].forEach(([s,k],i)=>addP('逃子',s,k,'逃子 '+(i+1),'黑先。藍點的黑子被叫吃了，救出它！',s=='e2'?'有時最好的逃跑方法是反過來吃掉對方。':'往氣最多的方向長出去。'));
+[['s3',0],['s3',2],['s3',4],['b3',0],['b3',1],['k3',0],['k3',3]].forEach(([s,k],i)=>addP('做活',s,k,'做活 '+(i+1),'黑先。讓黑棋做出兩隻眼活棋。','下在眼位的正中間（要點），把空間分成兩隻眼。'));
+[['s3',0],['s3',6],['s3',5],['b3',0],['b3',2],['b3',5],['k3',0],['k3',6]].forEach(([s,k],i)=>addP('殺棋',s,k,'殺棋 '+(i+1),'黑先。破壞白棋的眼位，讓白棋只有一隻眼而死。','對方做活的要點，就是我方殺棋的要點。',true));
+// ===== 課程 =====
+const L=[
+{t:'棋盤與落子',x:`<p>圍棋由<b>黑棋</b>和<b>白棋</b>輪流下，<b>黑棋先下</b>。棋子下在線與線的<b>交叉點</b>上（不是格子裡），下了就不能移動。</p><p>正式棋盤是 19×19 路，初學常用 9×9 路。盤上的小黑點叫「星」，正中央的星叫「<b>天元</b>」。</p><div class="tip">目標：用自己的棋子圍出比對方更大的地盤。</div>`,ex:E(9),ext:'試試看：點交叉點輪流放黑白子。',pr:[{rows:E(9),desc:'在任何一個交叉點下一顆黑子。',steps:[{goal:'any',a:[2,2]}]},{rows:E(9),desc:'把黑子下在「天元」（正中央的星）。',steps:[{ok:[[4,4]],a:[4,4]}]}]},
+{t:'氣',x:`<p>一顆棋子上下左右<b>相鄰的空交叉點</b>叫做「<b>氣</b>」（斜的不算）。</p><p>中間的子有 4 口氣，邊上 3 口，角上只有 2 口。相連（上下左右緊貼）的同色棋子共用氣，是一個整體。</p>`,ex:[".....",".....","..O..",".....","....."],ext:'白子的 4 口氣在上下左右。',pr:[{rows:[".....",".....","..O..",".....","....."],target:[2,2],desc:'黑先。下在白子的其中一口氣上（緊貼白子）。',steps:[{goal:'touch',a:[2,1]}]},{rows:["..O..",".....",".....",".....","....."],target:[2,0],desc:'邊上的白子只有 3 口氣，緊住其中一口。',steps:[{goal:'touch',a:[1,0]}]}]},
+{t:'提子',x:`<p>當一顆棋子（或一塊棋）的<b>氣全部被對方堵住</b>，就要從盤上拿掉，這叫「<b>提子</b>」。提掉的子算對方的戰果。</p>`,ex:[".....","..X..",".XO..","..X..","....."],ext:'黑下在白子右邊就能提子。',pr:[{rows:SH.c1.rows,desc:'黑先，提掉白子。',steps:SH.c1.steps},{rows:SH.c3.rows,desc:'角上的白子只剩一口氣，提掉它。',steps:SH.c3.steps},{rows:SH.c2.rows,desc:'兩顆白子連在一起，也只剩一口氣。',steps:SH.c2.steps}]},
+{t:'叫吃（打吃）',x:`<p>讓對方的棋只剩<b>一口氣</b>，下一手就能提掉，這叫「<b>叫吃</b>」，也叫「<b>打吃</b>」。</p><div class="tip">叫吃時要注意自己的棋子不要也只剩一口氣！</div>`,ex:[".....","..X..",".XO..",".....","....."],ext:'白子還有 2 口氣，黑下一手就能叫吃。',pr:[{rows:[".....","..X..",".XO..",".....","....."],desc:'黑先，叫吃白子（讓白子只剩一口氣）。',steps:[{goal:'atari',a:[3,2]}]}]},
+{t:'逃跑與連接',x:`<p>自己的棋被叫吃時，可以往外<b>長</b>（延伸）增加氣，或<b>連接</b>到自己的棋子上。</p><p>相連的棋子氣更多、更安全；被分開（被「斷」）就容易被吃。</p>`,ex:SH.e1.rows,ext:'黑子被叫吃，往下長就有 3 口氣。',pr:[{rows:SH.e1.rows,target:SH.e1.target,desc:'黑子被叫吃了，逃出來！',steps:SH.e1.steps},{rows:SH.e3.rows,target:SH.e3.target,desc:'兩顆黑子被叫吃，往哪裡長？',steps:SH.e3.steps}]},
+{t:'禁著點',x:`<p>如果下一顆子後，自己的棋<b>完全沒有氣</b>，又<b>不能提掉</b>對方的子，這個點就是「<b>禁著點</b>」，不能下。</p><p><b>例外</b>：如果下下去能提掉對方的子（讓自己有氣），就可以下！</p>`,ex:[".X...","X.X..",".X...",".....","....."],ext:'左上角被黑包圍的點，白棋不能下（禁著點）。',pr:[{rows:SH.ko.rows,desc:'中間的空點被白子包圍，但黑下去能提掉白子，所以不是禁著點。下下看！',steps:SH.ko.steps}]},
+{t:'劫',x:`<p>雙方可以互相提一子、無限循環的形狀叫「<b>劫</b>」。</p><p>規則：對方剛提掉你一子形成劫時，你<b>不能馬上提回</b>，必須先在別的地方下一手（叫「找劫材」），下一回合才能提。</p>`,ex:SH.ko.rows,ext:'黑提白子後，白不能立刻提回，試試看。',pr:[{rows:transform(SH.ko,1).rows,desc:'黑先，提掉劫裡的白子。',steps:transform(SH.ko,1).steps}]},
+{t:'眼與活棋',x:`<p>被自己棋子完全圍住的空點叫「<b>眼</b>」。對方不能下在眼裡（那是禁著點）。</p><p>一塊棋若有<b>兩隻（以上）真眼</b>，對方永遠無法把氣全部堵住，就是「<b>活棋</b>」。只有一隻眼就會被吃，是「<b>死棋</b>」。</p><div class="tip">口訣：兩眼活棋。</div>`,ex:SH.s3.rows,ext:'黑棋上方有三個連續空點（直三），下在中間就有兩隻眼。',pr:[{rows:SH.s3.rows,desc:'黑先，讓黑棋做出兩隻眼。',steps:SH.s3.steps},{rows:SH.k3.rows,desc:'角上的三個空點（曲三），找出做活的要點。',steps:SH.k3.steps}]},
+{t:'死活基礎',x:`<p>攻擊方要阻止對方做出兩隻眼。很多形狀有一個「<b>要點</b>」：做活的一方下了就活，殺棋的一方下了就死。</p><div class="tip">「敵之要點即我之要點」。直三、曲三的要點都在中間。</div>`,ex:swap(SH.s3).rows,ext:'白棋直三：黑下中間，白就只有一隻眼。',pr:[{rows:swap(SH.s3).rows,desc:'黑先，殺死白棋。',steps:SH.s3.steps},{rows:swap(SH.b3).rows,desc:'黑先，殺死這塊白棋（彎曲的三個空點）。',steps:SH.b3.steps}]},
+{t:'征子與枷吃',x:`<p><b>征子</b>：連續叫吃，讓對方像樓梯一樣一路逃，最後撞到邊或你的子而被吃光。</p><p><b>枷吃</b>：不直接叫吃，而是在對方前方「罩」一手，讓它怎麼逃都逃不出去。</p><p>兩者的重點：<b>從正確的方向叫吃</b>，把對方趕向邊角或自己的棋子。</p>`,ex:[".........",".........","...XO....","....X....",".........",".........",".........",".........","........."],ext:'自己試著連續叫吃白子，看看會怎樣。',pr:[{rows:SH.c4.rows,desc:'黑先，兩手吃掉白子（白會逃一手）。',steps:SH.c4.steps}]},
+{t:'地與數目',x:`<p>被一方棋子圍住的空點就是那一方的「<b>地</b>」，每個點叫一「<b>目</b>」。</p><p>雙方之間不屬於任何一方的空點叫「單官」（公氣），不算地。</p>`,ex:[".X.O.",".X.O.",".X.O.",".X.O.",".X.O."],ext:'左邊一排是黑地（5 目），右邊是白地，中間是單官。',pr:[{quiz:'左圖中，黑棋圍住了幾目地？',ch:['3 目','5 目','10 目'],ans:1,rows:[".X.O.",".X.O.",".X.O.",".X.O.",".X.O."]},{quiz:'同一圖用「數子法」：黑棋的子＋地共有多少？',ch:['5','10','15'],ans:1,rows:[".X.O.",".X.O.",".X.O.",".X.O.",".X.O."]}]},
+{t:'終局與勝負',x:`<p>雙方都覺得沒有地方可下時，連續<b>虛手（Pass）</b>，對局結束。先把雙方都同意的<b>死子</b>拿掉。</p><p>本程式使用<b>中國規則數子法</b>：每方的「盤上活子＋圍住的空點」合計，多者勝。</p><p>因為黑棋先下比較有利，白棋要加上「<b>貼目</b>」補償。本程式貼 <b>7.5</b>（多 0.5 避免和棋）。9 路共 81 點。</p>`,ex:null,pr:[{quiz:'9 路棋盤終局：黑子＋地＝44，白子＋地＝37，貼目 7.5。誰贏？',ch:['黑贏 7 子','白贏 0.5','和棋'],ans:1},{quiz:'為什麼白棋要貼目？',ch:['因為白棋比較弱','因為黑棋先下，有先手優勢','因為白子比較多'],ans:1}]},
+];
+// ===== 存檔 =====
+const KEY='go-learn-v1';
+function load(){try{return Object.assign({les:{},pz:{},played:0,won:0,last:'',streak:0},JSON.parse(localStorage.getItem(KEY)||'{}'));}catch(e){return{les:{},pz:{},played:0,won:0,last:'',streak:0};}}
+let ST=load();
+function today(){const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+function save(){const t=today();if(ST.last!==t){const y=new Date();y.setDate(y.getDate()-1);const ys=y.getFullYear()+'-'+(y.getMonth()+1)+'-'+y.getDate();ST.streak=ST.last===ys?ST.streak+1:1;ST.last=t;}localStorage.setItem(KEY,JSON.stringify(ST));}
+// ===== 題目元件 =====
+const $=(h)=>{const d=document.createElement('div');d.innerHTML=h;return d.firstElementChild||d;};
+function problem(P,onSolved){
+  const box=$('<div class="card"></div>');
+  if(P.quiz){box.innerHTML=`<div class="quiz"><b>${P.quiz}</b><div class="bd"></div>${P.ch.map((c,i)=>`<button data-i="${i}">${c}</button>`).join('')}<div class="msg"></div></div>`;
+    if(P.rows){const p=parse(P.rows);drawBoard(box.querySelector('.bd'),p.n,p.b);}
+    box.querySelectorAll('button').forEach(bt=>bt.onclick=()=>{const m=box.querySelector('.msg');if(+bt.dataset.i===P.ans){m.className='msg ok';m.textContent='✔ 答對了！';onSolved&&onSolved();}else{m.className='msg bad';m.textContent='✘ 再想想看';}});return box;}
+  const init=parse(P.rows),n=init.n,tgt=P.target?P.target[1]*n+P.target[0]:null;
+  let b,ko,step,done,lock,last,hint;
+  box.innerHTML=`${P.title?`<h3>${P.title} <span class="tag">${P.cat}</span></h3>`:''}<div>${P.desc}</div><div class="bd"></div><div class="msg info">黑先</div><div class="row"><button class="h">💡 提示</button><button class="a">顯示答案</button><button class="r">重來</button></div>`;
+  const bd=box.querySelector('.bd'),msg=box.querySelector('.msg');
+  const say=(t,c)=>{msg.className='msg '+c;msg.textContent=t;};
+  const P2=(v)=>v[1]*n+v[0];
+  function reset(){b=init.b.slice();ko=-1;step=0;done=false;lock=false;last=-1;hint=null;say('黑先','info');draw();}
+  function draw(){drawBoard(bd,n,b,{last,hint,marks:tgt!=null&&b[tgt]?[]:[] ,labels:tgt!=null&&!done?{[tgt]:'★'}:null,onTap:tap});}
+  function check(s,p,r){
+    switch(s.goal){
+      case 'any':return true;
+      case 'touch':return nbrs(n,p).includes(tgt);
+      case 'capture':return r.cap>=1;
+      case 'atari':{if(groupAt(r.b,n,p).libs.size<2)return false;return nbrs(n,p).some(q=>r.b[q]===2&&groupAt(r.b,n,q).libs.size===1);}
+      case 'save':{if(!r.b[tgt])return false;const l=groupAt(r.b,n,tgt).libs.size;return l>=3||(r.cap>0&&l>=2);}
+      default:return (s.ok||[s.a]).some(v=>P2(v)===p);
+    }
+  }
+  function tap(p){if(done||lock)return;const s=P.steps[step],r=tryPlay(b,n,p,1,ko);
+    if(r.err){say(ERR[r.err],'bad');return;}
+    hint=null;
+    if(!check(s,p,r)){const ob=b;b=r.b;last=p;draw();say('✘ 不對喔，再試一次','bad');lock=true;setTimeout(()=>{b=ob;last=-1;lock=false;draw();},900);return;}
+    b=r.b;ko=r.ko;last=p;step++;
+    if(s.reply){lock=true;draw();say('✔ 好棋！白棋應對中…','ok');setTimeout(()=>{const rr=tryPlay(b,n,P2(s.reply),2,ko);if(!rr.err){b=rr.b;ko=rr.ko;last=P2(s.reply);}lock=false;draw();say('白棋應了一手，繼續！','info');},600);return;}
+    if(step>=P.steps.length){done=true;draw();say('✔ 正確！','ok');onSolved&&onSolved();}else draw();}
+  box.querySelector('.h').onclick=()=>{if(done)return;hint=P2(P.steps[step].a);draw();say(P.hint||'看看標示的位置','info');};
+  box.querySelector('.r').onclick=reset;
+  box.querySelector('.a').onclick=()=>{reset();lock=true;let i=0;const go=()=>{if(i>=P.steps.length){done=true;lock=false;draw();say('這就是答案（請按重來自己試一次）','info');return;}const s=P.steps[i++];const r=tryPlay(b,n,P2(s.a),1,ko);b=r.b;ko=r.ko;last=P2(s.a);draw();if(s.reply)setTimeout(()=>{const rr=tryPlay(b,n,P2(s.reply),2,ko);b=rr.b;ko=rr.ko;last=P2(s.reply);draw();setTimeout(go,700);},700);else setTimeout(go,700);};go();};
+  reset();return box;
+}
+function sandbox(rows,txt){
+  const box=$('<div class="card"><b>範例棋盤</b>（可自由落子）<div class="bd"></div><div class="msg info"></div><div class="row"><button>重設</button></div></div>');
+  const init=parse(rows),n=init.n;let b,ko,c,last;const bd=box.querySelector('.bd'),msg=box.querySelector('.msg');
+  const draw=()=>drawBoard(bd,n,b,{last,onTap:p=>{const r=tryPlay(b,n,p,c,ko);if(r.err){msg.className='msg bad';msg.textContent=ERR[r.err];return;}b=r.b;ko=r.ko;last=p;msg.className='msg info';msg.textContent=(r.cap?`提掉 ${r.cap} 子！`:'')+'輪到'+(c==1?'白':'黑');c=3-c;draw();}});
+  const reset=()=>{b=init.b.slice();ko=-1;c=1;last=-1;msg.className='msg info';msg.textContent=txt||'輪到黑';draw();};
+  box.querySelector('button').onclick=reset;reset();return box;
+}
+// ===== 頁面 =====
+const app=document.getElementById('app'),hd=document.getElementById('hd');
+let tab='lessons';
+function setHead(t,back){hd.innerHTML='';if(back){const b=document.createElement('button');b.textContent='‹ 返回';b.onclick=back;hd.appendChild(b);}hd.appendChild(document.createTextNode(t));}
+function show(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));window.scrollTo(0,0);({lessons,puzzles,play,progress})[t]();}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
+function lessons(){setHead('📖 課程');const done=Object.keys(ST.les).length;
+  app.innerHTML=`<div class="card">從零開始學圍棋！共 ${L.length} 課，已完成 ${done} 課。完成一課才能解鎖下一課。</div><div class="list"></div>`;
+  const ls=app.querySelector('.list');L.forEach((l,i)=>{const un=i==0||ST.les[i-1],d=ST.les[i];const b=$(`<button class="${d?'done':''}" ${un?'':'disabled'}><span class="n">${d?'✓':i+1}</span><span>${l.t}<small>${d?'已完成':un?'點此開始':'🔒 完成上一課解鎖'}</small></span></button>`);b.onclick=()=>lesson(i);ls.appendChild(b);});}
+function lesson(i){const l=L[i];setHead(`第 ${i+1} 課`,()=>show('lessons'));window.scrollTo(0,0);
+  app.innerHTML=`<div class="card"><h2>${i+1}. ${l.t}</h2>${l.x}</div>`;
+  if(l.ex)app.appendChild(sandbox(l.ex,l.ext));
+  app.appendChild($(`<h3>練習（${l.pr.length} 題）</h3>`));
+  let solved=new Set();const fin=$(`<div class="card" style="display:none;text-align:center"><b class="ok">🎉 本課完成！</b><div class="row" style="margin-top:8px"></div></div>`);
+  l.pr.forEach((p,j)=>app.appendChild(problem(Object.assign({title:'練習 '+(j+1),cat:l.t},p),()=>{solved.add(j);if(solved.size===l.pr.length){ST.les[i]=true;save();fin.style.display='block';}})));
+  const row=fin.querySelector('.row');if(i<L.length-1){const nb=$('<button class="pri">下一課 ›</button>');nb.onclick=()=>lesson(i+1);row.appendChild(nb);}const bk=$('<button>課程列表</button>');bk.onclick=()=>show('lessons');row.appendChild(bk);
+  app.appendChild(fin);if(ST.les[i])fin.style.display='block';}
+function puzzles(){setHead('🧩 練習題');const n=Object.keys(ST.pz).length;
+  app.innerHTML=`<div class="card">共 ${PZ.length} 題，已解 ${n} 題。點題號開始。</div>`;
+  for(const c of ['吃子','逃子','做活','殺棋']){app.appendChild($(`<h3>${c}</h3>`));const g=$('<div class="grid"></div>');PZ.forEach((p,i)=>{if(p.cat!==c)return;const b=$(`<button class="${ST.pz[p.id]?'done':''}">${ST.pz[p.id]?'✓':i+1}</button>`);b.onclick=()=>puzzle(i);g.appendChild(b);});app.appendChild(g);}}
+function puzzle(i){const p=PZ[i];setHead(`第 ${i+1} 題`,()=>show('puzzles'));window.scrollTo(0,0);app.innerHTML='';
+  app.appendChild(problem(p,()=>{ST.pz[p.id]=true;save();}));
+  const r=$('<div class="row"></div>');const a=$('<button>‹ 上一題</button>'),b=$('<button class="pri">下一題 ›</button>');a.disabled=i==0;b.disabled=i==PZ.length-1;a.onclick=()=>puzzle(i-1);b.onclick=()=>puzzle(i+1);r.append(a,b);app.appendChild(r);}
+// ===== 對弈 =====
+const KOMI=7.5;let G=null;
+function newGame(mode,me){G={n:9,b:new Array(81).fill(0),ko:-1,turn:1,caps:{1:0,2:0},passes:0,last:-1,hist:[],mode:mode||'ai',me:me||1,over:false,scoring:false,dead:new Set(),counted:false};}
+function aiMove(b,n,c,ko){const o=3-c;let best=-1,bs=-1e9;
+  const myAtari=new Set();for(let p=0;p<n*n;p++)if(b[p]===c&&groupAt(b,n,p).libs.size===1)myAtari.add(p);
+  for(let p=0;p<n*n;p++){if(b[p])continue;
+    const ns=nbrs(n,p);if(ns.every(q=>b[q]===c)&&ns.every(q=>groupAt(b,n,q).libs.size>1))continue; // 不填自己的眼
+    const r=tryPlay(b,n,p,c,ko);if(r.err)continue;let s=Math.random()*3;
+    s+=r.cap*12;const g=groupAt(r.b,n,p),L=g.libs.size;
+    if(ns.some(q=>myAtari.has(q))&&L>=2)s+=10*Math.min(g.stones.length,4)/2+ (L>=3?4:0);
+    if(L===1&&!r.cap)s-=20;else if(L===2)s-=2;
+    for(const q of ns)if(r.b[q]===o){const l=groupAt(r.b,n,q).libs.size;if(l===1)s+=4;else if(l===2)s+=1;}
+    const x=p%n,y=(p/n)|0,e=Math.min(x,y,n-1-x,n-1-y);if(e===0)s-=3;else if(e>=2)s+=1;
+    if(s>bs){bs=s;best=p;}}
+  return bs<-5?-1:best;}
+function play(){setHead('⚫ 對弈');if(!G)newGame();render();}
+function snapshot(){G.hist.push({b:G.b.slice(),ko:G.ko,turn:G.turn,caps:{...G.caps},passes:G.passes,last:G.last});}
+function doMove(p){const r=tryPlay(G.b,G.n,p,G.turn,G.ko);if(r.err)return r.err;snapshot();G.b=r.b;G.ko=r.ko;G.caps[G.turn]+=r.cap;G.last=p;G.passes=0;G.turn=3-G.turn;return null;}
+function doPass(){snapshot();G.passes++;G.ko=-1;G.last=-1;G.turn=3-G.turn;if(G.passes>=2){G.scoring=true;}}
+let aiTimer=null;
+function maybeAI(){if(G.mode!=='ai'||G.over||G.scoring||G.turn===G.me)return;clearTimeout(aiTimer);aiTimer=setTimeout(()=>{const p=aiMove(G.b,G.n,G.turn,G.ko);if(p<0){doPass();flash('電腦虛手（Pass）'+(G.scoring?'':'，換你'));}else doMove(p);render();},450);}
+let flashMsg='';function flash(t){flashMsg=t;}
+function result(){const{s,terr}=areaScore(G.b,G.n,G.dead);const w=s[2]+KOMI,d=s[1]-w;return{s,terr,w,txt:d>0?`黑勝 ${d} 子`:`白勝 ${-d} 子`,winner:d>0?1:2};}
+function finish(winner){G.over=true;if(G.mode==='ai'&&!G.counted){G.counted=true;ST.played++;if(winner===G.me)ST.won++;save();}}
+function render(){
+  const col=c=>c==1?'黑':'白';
+  let status;
+  if(G.over)status=G.resTxt;
+  else if(G.scoring)status='終局！點擊盤上的死子標記（再點取消），然後按「計算勝負」。';
+  else status=(G.mode==='ai'?(G.turn===G.me?'輪到你（'+col(G.me)+'）':'電腦思考中…'):'輪到'+col(G.turn));
+  app.innerHTML=`<div class="seg"><button data-m="ai" class="${G.mode=='ai'?'on':''}">對電腦</button><button data-m="pvp" class="${G.mode=='pvp'?'on':''}">雙人對弈</button></div>
+  <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between;font-size:15px"><span>⚫ 提子 ${G.caps[1]}</span><span>9 路 · 貼目 ${KOMI}</span><span>⚪ 提子 ${G.caps[2]}</span></div><div class="bd"></div><div class="msg ${G.over?'ok':'info'}" id="st">${flashMsg?flashMsg+'<br>':''}${status}</div>
+  <div class="row" id="ctl"></div></div><div class="tip">對電腦時你執黑先下。雙方連續虛手即終局，使用中國規則數子法。</div>`;
+  flashMsg='';
+  app.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{if(b.dataset.m!==G.mode&&(G.hist.length===0||G.over||confirm('要放棄目前的棋局，開新局嗎？'))){newGame(b.dataset.m);render();}});
+  const opts={last:G.last,onTap:tapGame};if(G.scoring||G.over){opts.dead=G.dead;opts.terr=areaScore(G.b,G.n,G.dead).terr;}
+  drawBoard(app.querySelector('.bd'),G.n,G.b,opts);
+  const ctl=app.querySelector('#ctl');const btn=(t,f,cls)=>{const b=$(`<button class="${cls||''}">${t}</button>`);b.onclick=f;ctl.appendChild(b);return b;};
+  if(G.over){btn('再來一局',()=>{newGame(G.mode);render();},'pri');}
+  else if(G.scoring){btn('計算勝負',()=>{const r=result();G.resTxt=`黑 ${r.s[1]} 子，白 ${r.s[2]}＋${KOMI}＝${r.w} 子 → ${r.txt}`;finish(r.winner);render();},'pri');btn('繼續下',()=>{G.scoring=false;G.passes=0;G.dead.clear();render();maybeAI();});}
+  else{const my=G.mode!=='ai'||G.turn===G.me;
+    btn('虛手',()=>{if(!my)return;doPass();render();maybeAI();}).disabled=!my;
+    btn('悔棋',()=>{clearTimeout(aiTimer);let k=G.mode==='ai'?(G.turn===G.me?2:1):1;while(k--&&G.hist.length){const h=G.hist.pop();Object.assign(G,h);}G.passes=0;render();maybeAI();}).disabled=!G.hist.length;
+    btn('認輸',()=>{if(!confirm('確定要認輸嗎？'))return;const loser=G.mode==='ai'?G.me:G.turn;G.resTxt=`${col(loser)}認輸，${col(3-loser)}勝`;finish(3-loser);render();});
+    btn('新局',()=>{if(G.hist.length&&!confirm('要開新局嗎？'))return;newGame(G.mode);render();});}
+}
+function tapGame(p){if(G.over)return;
+  if(G.scoring){if(!G.b[p])return;const g=groupAt(G.b,G.n,p).stones;const isD=G.dead.has(p);for(const s of g)isD?G.dead.delete(s):G.dead.add(s);render();return;}
+  if(G.mode==='ai'&&G.turn!==G.me)return;
+  const e=doMove(p);if(e){flash('<span class="bad">'+ERR[e]+'</span>');render();return;}render();maybeAI();}
+// ===== 進度 =====
+function progress(){setHead('📊 進度');const ld=Object.keys(ST.les).length,pd=Object.keys(ST.pz).length;
+  app.innerHTML=`<div class="stat"><div><b>${ld}/${L.length}</b>課程完成</div><div><b>${pd}/${PZ.length}</b>練習題已解</div><div><b>${ST.won}/${ST.played}</b>對電腦 勝/局</div><div><b>${ST.streak}</b>連續學習天數</div></div>
+  <div class="card" style="margin-top:12px"><b>課程</b>${L.map((l,i)=>`<div>${ST.les[i]?'✅':'⬜'} ${i+1}. ${l.t}</div>`).join('')}</div>
+  <div class="card"><b>題目分類</b>${['吃子','逃子','做活','殺棋'].map(c=>{const a=PZ.filter(p=>p.cat==c);return `<div>${c}：${a.filter(p=>ST.pz[p.id]).length} / ${a.length}</div>`}).join('')}</div>
+  <button id="rst" style="width:100%;color:#c62828">重設所有進度</button>`;
+  document.getElementById('rst').onclick=()=>{if(confirm('確定要清除所有學習進度嗎？此動作無法復原。')){localStorage.removeItem(KEY);ST=load();progress();}};}
+show('lessons');
+</script>
+</body>
+</html>
